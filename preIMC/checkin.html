@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Event Check-in</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        Ubuntu: ['Ubuntu', 'sans-serif'], 
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Essential base styles to cover the viewport */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; 
+            font-family: 'Ubuntu', sans-serif;
+            background-image: url("https://cmu-imc.med.cmu.ac.th/web/wp-content/uploads/2025/10/checkin_wallpaper.png");
+        }
+        
+        #screen-container {
+            /* Full viewport cover, centered */
+            width: 100vw;
+            height: 85vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative; /* Added relative positioning to anchor the absolute header controls */
+        }
+        
+        /* Custom glow effects for text based on the image's aesthetic */
+        .glowing-text {
+            text-shadow: 0 0 3px rgba(255, 255, 255, 0.7), 0 0 8px rgba(255, 255, 255, 0.3);
+        }
+        .glowing-number {
+            text-shadow: 0 0 10px rgba(255, 255, 255, 1), 0 0 25px rgba(255, 255, 255, 0.8);
+        }
+
+        /* Visible NFC input styling */
+        .nfc-input-hidden {
+            width: 100%;
+            padding: 0.25rem 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 0.375rem;
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s;
+        }
+        .nfc-input-hidden:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Status Styles for visual feedback */
+        #statusContainer {
+            transition: all 0.3s ease;
+            padding: 0.75rem 1rem;
+            border: 1px solid transparent;
+            min-height: 4rem; /* Ensure minimum space */
+        }
+        #statusContainer.processing {
+            border-color: #3b82f6; /* blue-500 */
+            background-color: rgba(59, 130, 246, 0.2);
+        }
+        #statusContainer.success {
+            border-color: #34d399; /* emerald-400 */
+            background-color: rgba(52, 211, 153, 0.2);
+        }
+        #statusContainer.error {
+            border-color: #ef4444; /* red-500 */
+            background-color: rgba(239, 68, 68, 0.2);
+        }
+
+        /* Styles for the new Modal Dialog */
+        #terminal-modal {
+            /* Custom styling for the dialog box */
+            border: 2px solid #3b82f6; /* Blue border */
+            border-radius: 0.5rem;
+            padding: 2rem;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        #terminal-modal::backdrop {
+            /* Darken the background */
+            background: rgba(0, 0, 0, 0.7);
+        }
+        
+        /* Custom disabled style for select boxes */
+        .select-disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<dialog id="terminal-modal">
+    <div class="space-y-4">
+        <h3 class="text-xl font-bold glowing-text text-yellow-400">🚨 Attention: Select Terminal</h3>
+        <p class="text-sm font-light">You must select a specific day and time slot to begin check-ins.</p>
+        
+        <!-- DAY / EVENT SELECTION -->
+        <select id="modalUserIdInput" class="nfc-input-hidden !w-full !p-2 !text-black !bg-white"> 
+            <option value="" disabled selected>1. Select Event Day</option>
+            <option value="Pre-IMC 2 Nov">Pre-IMC 2 Nov</option>
+            <option value="Pre-IMC 8 Nov">Pre-IMC 8 Nov</option>
+            <option value="Pre-IMC 19 Nov">Pre-IMC 19 Nov</option>
+            <option value="Pre-IMC Cultural Workshop">Pre-IMC Cultural Workshop</option>
+            <option value="Pre-IMC 24 Nov">Pre-IMC 24 Nov</option>
+            <option value="Demo / Test">Demo / Test</option>
+        </select>
+
+        <!-- NEW TIME SLOT SELECTION -->
+        <select id="modalTimeSlotInput" class="nfc-input-hidden !w-full !p-2 !text-black !bg-white select-disabled" disabled> 
+            <option value="" disabled selected>2. Select Time Slot</option>
+            <option value="Morning Break">Morning Break</option>
+            <option value="Lunch">Lunch</option>
+            <option value="Afternoon Break">Afternoon Break</option>
+            <option value="Full Day">Full Day (Only for Day 1)</option>
+        </select>
+
+        <button id="confirm-terminal-btn" 
+                class="w-full mt-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded transition duration-150 disabled:bg-gray-500"
+                disabled>
+            Confirm Selection
+        </button>
+    </div>
+</dialog>
+<div id="screen-container">
+    <div class="p-6 md:p-8 flex flex-col justify-between text-white w-full h-full">
+        
+        <header class="text-center space-y-3 pt-4">
+            <div class="flex items-center justify-center w-full">
+                <img src="https://cmu-imc.med.cmu.ac.th/web/wp-content/uploads/2025/10/IMC_logo_full_white_color.png" class="h-40 md:h-48">
+            </div>
+
+            <div class="text-2xl md:text-4xl font-light glowing-text flex flex-col space-y-1">
+                <span id="current-date" class="text-lg md:text-2xl">--</span>
+                <span id="current-time">--:--:--</span>
+            </div>
+
+            <!-- Controls Container moved to top right -->
+            <div id="controls-container" class="absolute top-4 right-4 flex flex-col items-end space-y-2">
+                
+                <div class="glowing-text w-48">
+                    <!-- NFC INPUT (HIDDEN) -->
+                    <input id="nfcInput" 
+                            type="text" 
+                            autofocus 
+                            placeholder="Scan NFC tag..." 
+                            class="nfc-input-hidden" 
+                            aria-label="NFC input"
+                    />
+                </div>
+                
+                <div class="glowing-text">
+                    <!-- TERMINAL ID DISPLAY (VISUAL ONLY) -->
+                    <!-- NOTE: This is now a display sink for the active terminal ID -->
+                    <select id="userIdInput" class="nfc-input-hidden" disabled> 
+                        <option value="" disabled selected>Terminal ID (Not Set)</option>
+                    </select>
+                </div>
+                
+                <div class="flex flex-col items-end">
+                    <div class="text-xs uppercase tracking-wider opacity-90 glowing-text">Total Scanned</div>
+                    <div class="text-2xl uppercase tracking-wider opacity-90 glowing-text" id="scanned-count">0</div>
+                </div>
+
+            </div>
+            </header>
+        
+        <main class="text-center flex-grow flex flex-col justify-center items-center">
+            
+            <div class="space-y-3 mb-12">
+                <br/>
+                <h1 id="user-name" class="text-4xl md:text-6xl font-extrabold glowing-text"></h1>
+                <p id="user-team" class="2xl md:text-4xl font-medium opacity-90 glowing-text"></p>
+                <p id="user-role" class="text-xl md:text-3xl font-light opacity-80 glowing-text italic">Waiting for scan</p>
+            </div>
+            
+            </main>
+
+        <footer class="flex flex-col items-center text-xs md:text-base w-full pt-8">
+            
+            <div class="w-full text-center glowing-text mb-2">
+                <p id="scan-message" class="text-lg md:text-3xl font-bold text-yellow-300">Please scan your badge</p>
+            </div>
+
+            <div id="statusContainer" class="w-full max-w-lg text-center rounded-lg bg-gray-900 bg-opacity-70 shadow-xl border border-gray-700">
+                <p id="statusMessage" class="text-base md:text-lg font-bold text-white">Ready to scan...</p>
+            </div>
+            
+        </footer>
+
+
+    </div>
+    </div>
+
+<script>
+    // 1. Data Definition (NEW: Added activeTerminalId)
+    const DATA = {
+        scannedCount: 0,
+        expectedCount: 100, // Total expected for calculations
+        userName: "Welcome",
+        teamName: "Event Check-In System", // Reserved for scanned user's team/group name
+        role: "",
+        activeTerminalId: "Terminal ID (Not Set)" // NEW: Holds the combined ID for display/API calls
+    };
+    
+    // --- Global Variable for Display Hold Timer ---
+    let displayTimeoutId = null;
+    
+    // 2. DOM Elements
+    const elements = {
+        // UI Elements
+        scanCount: document.getElementById('scanned-count'),
+        scanMessage: document.getElementById('scan-message'),
+        currentTime: document.getElementById('current-time'),
+        currentDate: document.getElementById('current-date'),
+        userName: document.getElementById('user-name'),
+        userTeam: document.getElementById('user-team'),
+        userRole: document.getElementById('user-role'),
+        userIdInput: document.getElementById('userIdInput'), // VISIBLE but DISABLED select (Receptacle for combined ID)
+        
+        // Modal Elements
+        terminalModal: document.getElementById('terminal-modal'),
+        modalUserIdInput: document.getElementById('modalUserIdInput'),     // Day/Event select
+        modalTimeSlotInput: document.getElementById('modalTimeSlotInput'), // NEW Time Slot select
+        confirmTerminalBtn: document.getElementById('confirm-terminal-btn'),
+
+
+        // NFC/Scan Elements
+        nfcInput: document.getElementById('nfcInput'),
+        statusMessage: document.getElementById('statusMessage'),
+        statusContainer: document.getElementById('statusContainer')
+    };
+    
+    // ** UPDATED URL: Points to the new PHP script on the local XAMPP server **
+    const API_BASE_URL = '/api.php'; // <--- ASSUMES folder 'nfc_app' in htdocs
+
+    // --- Utility Functions ---
+
+    function updateTime() {
+        const now = new Date();
+        const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        
+        // Update time
+        if (elements.currentTime) {
+            elements.currentTime.textContent = now.toLocaleTimeString('en-US', timeOptions);
+        }
+        
+        // Update date (Using the cached elements reference to prevent potential runtime confusion)
+        if (elements.currentDate) {
+            elements.currentDate.textContent = now.toLocaleDateString('en-US', dateOptions);
+        }
+    }
+
+    // NEW LOGIC: Status team defaults to a helpful message if no user data is present
+    function updateUI(statusName = DATA.userName, statusTeam = DATA.teamName, statusRole = DATA.role, newCount = DATA.scannedCount) {
+        DATA.userName = statusName;
+        DATA.teamName = statusTeam;
+        DATA.role = statusRole;
+        DATA.scannedCount = newCount;
+        
+        elements.userName.textContent = DATA.userName;
+        
+        // Display generic status when idle, or the scanned user's team name
+        // Set a helpful message if we are in the default "Welcome" state
+        if (DATA.userName === "Welcome" && DATA.teamName === "Event Check-In System") {
+             elements.userTeam.textContent = DATA.activeTerminalId.includes("Not Set") ? 
+                                             "Terminal Not Selected" : "Ready to Scan";
+             elements.userRole.textContent = DATA.activeTerminalId.includes("Not Set") ?
+                                             "Please select a terminal first." : "Waiting for badge scan...";
+        } else {
+             // Display actual scanned user data
+             elements.userTeam.textContent = DATA.teamName; 
+             elements.userRole.textContent = DATA.role;
+        }
+
+
+        const left = DATA.expectedCount - DATA.scannedCount;
+        
+        elements.scanCount.textContent = DATA.scannedCount;
+        
+        // Update message status
+        if (left <= 0) {
+            elements.scanMessage.textContent = "All registrations complete! Thank you.";
+            elements.scanMessage.classList.replace('text-yellow-300', 'text-green-400');
+        } else {
+            elements.scanMessage.textContent = "Please scan your badge";
+            elements.scanMessage.classList.replace('text-green-400', 'text-yellow-300');
+        }
+        
+        // Update the display-only select box in the controls using the activeTerminalId
+        if (elements.userIdInput) {
+             const terminalText = DATA.activeTerminalId; 
+             const option = new Option(terminalText, terminalText, true, true);
+             elements.userIdInput.innerHTML = ''; // Clear existing options
+             elements.userIdInput.appendChild(option);
+        }
+    }
+    
+    /**
+     * Clears all state classes from the input field.
+     */
+    function resetInputClasses() {
+        elements.nfcInput.classList.remove('processing', 'success', 'error', 'input-active');
+    }
+
+    // --- NEW: Display reset function (5000ms delay) ---
+    function resetDisplayToIdle() {
+        // Clear status container class, but keep the success/error message in the input hidden for the 1000ms period
+        elements.statusContainer.classList.remove('processing', 'success', 'error');
+        // Reset main display to idle status, preserving the count
+        updateUI("Welcome", "Event Check-In System", "", DATA.scannedCount);
+        // Clear the global timer ID
+        displayTimeoutId = null;
+    }
+    
+    // --- UPDATED: Input re-enable function (250ms refractory period) ---
+    function enableInputAndFocus() {
+        // Only clear input classes here to match the 250ms input refractory period
+        resetInputClasses(); 
+        elements.nfcInput.disabled = false;
+        elements.nfcInput.classList.add('input-active');
+        try {
+            elements.nfcInput.focus();
+            if (typeof elements.nfcInput.select === 'function') elements.nfcInput.select();
+        } catch (e) { /* ignore */ }
+    }
+
+    /**
+     * Resets the UI back to the ready state (idle state). Used for init and failure.
+     */
+    function resetState() {
+        enableInputAndFocus(); // Re-enable input immediately
+        resetDisplayToIdle();  // Reset display immediately
+    }
+    
+    /**
+     * Standardized failure handler for server errors or lookup failures.
+     */
+    function handleFailure(step, error, delay = 1500) {
+        console.error(`Execution Error during ${step}:`, error);
+        resetInputClasses();
+        elements.nfcInput.classList.add('error');
+        elements.statusContainer.classList.remove('processing', 'success');
+        elements.statusContainer.classList.add('error');
+        // Adjusted text colors to be brighter against a dark background
+        elements.statusMessage.innerHTML = `<span class="text-red-300 font-bold">❌ CRITICAL ${step} ERROR:</span><br>
+                                             <span class="text-red-200">${error.message || error.toString()}</span>`;
+        
+        // Update the main UI with a failure message (using the terminal ID as context)
+        updateUI("Error!", elements.userIdInput.value, `Scan ID failed: ${elements.nfcInput.value}`, DATA.scannedCount); 
+
+        // On failure, use a quick 1500ms reset for the input and display
+        setTimeout(resetState, delay); 
+    }
+    
+    // --- Total Count Logic ---
+
+    async function fetchTerminalCount() {
+        // Reads the combined value from the VISIBLE, DISABLED input element (userIdInput)
+        const terminalId = elements.userIdInput.value; 
+        if (!terminalId || terminalId.includes('Not Set')) return; // Do nothing if no terminal is selected
+
+        try {
+            const payload = { terminal_id: terminalId };
+            
+            // Implement simple exponential backoff for resilience (not fully implemented here, just conceptual)
+            let response = await fetch(`${API_BASE_URL}?action=get_count`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                const newCount = result.total_count;
+                
+                // Only update the count, preserve other UI data. Call updateUI with current DATA
+                if (DATA.scannedCount !== newCount) {
+                     updateUI(DATA.userName, DATA.teamName, DATA.role, newCount);
+                }
+            } else {
+                // Log a warning but don't disrupt the main UI flow
+                console.warn(`Failed to fetch count for terminal ${terminalId}: ${result.message || response.statusText}`);
+            }
+
+        } catch (error) {
+            console.error("Count fetch failed:", error);
+        }
+    }
+
+    // --- Main Scan Logic ---
+
+    async function handleScan(value) {
+        // Read the combined terminal ID
+        const terminalId = elements.userIdInput.value;
+        if (!terminalId || terminalId.includes('Not Set')) {
+            // Re-show the modal if the terminal is somehow unselected
+            elements.terminalModal.showModal();
+            handleFailure('Validation', { message: 'Terminal not fully selected. Re-open selection.' }, 250);
+            return;
+        }
+
+        const payload = {
+            nfc_id: value,
+            terminal_id: terminalId // This will be the combined string: "Day - Slot"
+        };
+
+        // Reset and show processing state
+        resetInputClasses();
+        elements.nfcInput.classList.add('processing');
+        elements.nfcInput.disabled = true;
+        elements.statusMessage.innerHTML = '<span class="text-blue-300">Step 1/2: Logging ID to backend...</span>'; 
+        elements.statusContainer.classList.remove('error', 'success');
+        elements.statusContainer.classList.add('processing');
+
+        try {
+            // First call - Logging
+            let logResponse = await fetch(`${API_BASE_URL}?action=log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!logResponse.ok) {
+                throw new Error(`Logging failed: HTTP ${logResponse.status}`);
+            }
+            const logResult = await logResponse.json();
+            
+            if (logResult.status !== 'success') {
+                throw new Error(`Logging failed: ${logResult.message}`);
+            }
+
+            elements.statusMessage.innerHTML = `<span class="text-green-300">✅ Logging Successful.</span><br>
+                                 <span class="text-blue-300">Step 2/2: Searching lookup data...</span>`; 
+
+            // Second call - Lookup
+            let lookupResponse = await fetch(`${API_BASE_URL}?action=lookup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const lookupResult = await lookupResponse.json();
+            
+            // Fetch the latest count immediately after a successful log/lookup
+            await fetchTerminalCount(); 
+
+            if (lookupResponse.ok && lookupResult.status === 'success') {
+                const result = lookupResult.row;
+                
+                // Set success state on input and status container
+                elements.nfcInput.classList.remove('processing');
+                elements.nfcInput.classList.add('success');
+                elements.statusContainer.classList.remove('processing');
+                elements.statusContainer.classList.add('success');
+                
+                elements.statusMessage.innerHTML = `
+                    <span class="text-green-400 font-bold">✅ Check-in Success!</span><br>
+                    <span class="text-white">${result[0]}</span>
+                `;
+                
+                // Update UI with scanned user details immediately
+                updateUI(result[1], result[2], result[3], DATA.scannedCount); 
+
+                // --- NEW TIMING LOGIC ---
+                // 1. CLEAR existing display hold timer if any (ensures immediate display for new client)
+                if (displayTimeoutId) {
+                    clearTimeout(displayTimeoutId);
+                }
+
+                // 2. Refractory Period: Enable input after 250 ms (UPDATED)
+                setTimeout(enableInputAndFocus, 250); 
+                
+                // 3. Display Hold: Set new display reset timer for 5000 ms
+                displayTimeoutId = setTimeout(resetDisplayToIdle, 5000); 
+                
+            } else {
+                const errorMessage = lookupResult.message || `Lookup failed: ${lookupResponse.statusText}`;
+                // Keep the UI state updated even if lookup fails (for visual confirmation)
+                handleFailure('Lookup', { message: errorMessage }, 1500);
+            }
+        
+        } catch (error) {
+            // Ensure the count is up to date even if the API interaction fails
+            await fetchTerminalCount(); 
+            handleFailure('API Interaction', error, 1500);
+        }
+    }
+
+
+    // --- Initialization and Event Listeners ---
+
+    // 5. Initialization: Wait for the page to load
+    window.onload = () => {
+        
+        // --- MODAL LOGIC START ---
+        
+        // 1. Force the selection modal to appear immediately
+        if (elements.terminalModal && typeof elements.terminalModal.showModal === 'function') {
+            elements.terminalModal.showModal();
+        } else {
+            // Fallback
+            console.error("Modal not supported or failed to show. Please ensure both fields in the top right are set.");
+        }
+        
+        // 2a. Day/Event Selection: Enable Time Slot dropdown
+        elements.modalUserIdInput.addEventListener('change', (event) => {
+            const selectedValue = event.target.value;
+            // Enable the Time Slot dropdown
+            elements.modalTimeSlotInput.disabled = !selectedValue;
+            elements.modalTimeSlotInput.classList.toggle('select-disabled', !selectedValue);
+            
+            // Reset Time Slot selection and confirm button
+            elements.modalTimeSlotInput.value = "";
+            elements.confirmTerminalBtn.disabled = true;
+        });
+
+        // 2b. Time Slot Selection: Enable Confirm button
+        elements.modalTimeSlotInput.addEventListener('change', (event) => {
+             const selectedValue = event.target.value;
+             // Enable confirm button only if both Day and Slot are selected
+             const daySelected = elements.modalUserIdInput.value !== "";
+             elements.confirmTerminalBtn.disabled = !(daySelected && selectedValue);
+        });
+
+
+        // 3. Handle the confirmation button click
+        elements.confirmTerminalBtn.addEventListener('click', () => {
+            const daySelected = elements.modalUserIdInput.value;
+            const slotSelected = elements.modalTimeSlotInput.value;
+            
+            if (daySelected && slotSelected) {
+                
+                // A. COMBINE THE TWO VALUES
+                const fullTerminalId = `${daySelected} - ${slotSelected}`;
+                
+                // B. Copy the combined value to the VISIBLE, DISABLED original dropdown
+                elements.userIdInput.value = fullTerminalId;
+                
+                // C. Set the dedicated active ID state
+                DATA.activeTerminalId = fullTerminalId;
+                
+                // D. Reset the main UI to the clean "ready" state
+                updateUI("Welcome", "Event Check-In System", "", DATA.scannedCount); 
+                
+                // E. Close the modal
+                elements.terminalModal.close();
+                
+                // F. Fetch the count for the newly selected terminal
+                fetchTerminalCount(); 
+
+                // G. AUTOFOCUS THE NFC SCAN TEXTBOX AFTER SELECTION
+                setTimeout(resetState, 50); // Calling resetState will focus the nfcInput
+            }
+        });
+        
+        // --- MODAL LOGIC END ---
+
+
+        // Initial setup for UI (using default DATA)
+        updateUI();
+
+        // Call time function immediately
+        updateTime(); 
+        
+        // Update time every second
+        setInterval(updateTime, 1000);
+
+        // --- NEW: Start count fetching interval ---
+        // Fetch count immediately on load/selection change, then every 5 seconds.
+        const countInterval = setInterval(fetchTerminalCount, 5000); 
+
+        // Ensure the hidden NFC input is focused.
+        if (elements.nfcInput) {
+            setTimeout(resetState, 50); // Use resetState to ensure focus/select is called
+        }
+        
+        // Event Listener: Captures Enter key to initiate scan
+        elements.nfcInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                event.preventDefault();
+                let value = elements.nfcInput.value.trim();
+                let terminalId = elements.userIdInput.value;
+
+                if (!terminalId || terminalId.includes('Not Set')) {
+                    // Alert the user if no terminal is selected
+                    handleFailure('Validation', { message: 'Day and Slot not selected. Re-open selection.' }, 250);
+                    // Re-open the modal
+                    elements.terminalModal.showModal();
+                    return;
+                }
+
+                if (value && !elements.nfcInput.disabled) {
+                    elements.nfcInput.value = ''; // Clear immediately
+                    handleScan(value);
+                }
+            }
+        });
+    };
+</script>
+
+</body>
+</html>

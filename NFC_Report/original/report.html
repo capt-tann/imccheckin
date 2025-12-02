@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Login Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;0,500;0,700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Ubuntu', 'sans-serif'], // Changed to Ubuntu
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Consistent dark background and font */
+        .ubuntu-font {
+            font-family: 'Ubuntu', sans-serif;
+        }
+        /* Style for the terminal selector elements */
+        .terminal-select {
+            background-color: #374151; /* gray-700 */
+            border: 1px solid #4b5563; /* gray-600 */
+            color: white;
+            font-size: 1rem;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 100%;
+            transition: all 0.15s ease-in-out;
+        }
+        .terminal-select:focus {
+            outline: none;
+            ring-color: #3b82f6; /* blue-500 */
+            border-color: #3b82f6;
+        }
+        /* Style for clickable table rows */
+        .clickable-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .clickable-row:hover {
+            background-color: #374151; /* gray-700 */
+        }
+        .active-row {
+             background-color: #1e40af !important; /* blue-800 */
+             border-left: 4px solid #3b82f6; /* blue-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6 md:p-10 ubuntu-font">
+
+    <div class="max-w-5xl mx-auto space-y-8">
+
+        <header class="text-center pb-4 border-b border-gray-700">
+            <h1 class="text-4xl font-extrabold text-blue-400">🔬 Event Login Report</h1>
+            <p class="text-lg text-gray-400 mt-2">Click on any role row to see the detailed list of participants.</p>
+        </header>
+
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4">
+            
+            <label for="daySelector" class="text-lg font-medium hidden md:block">Select Event:</label>
+            
+            <select id="daySelector" class="terminal-select md:w-1/3">
+                <option value="" disabled selected>1. Select Event Day</option>
+                <option value="Pre-IMC 2 Nov">Pre-IMC 2 Nov</option>
+                <option value="Pre-IMC 8 Nov">Pre-IMC 8 Nov</option>
+                <option value="Pre-IMC 19 Nov">Pre-IMC 19 Nov</option>
+                <option value="Pre-IMC Cultural Workshop">Pre-IMC Cultural Workshop</option>
+                <option value="Pre-IMC 24 Nov">Pre-IMC 24 Nov</option>
+                <option value="Demo / Test">Demo / Test</option>
+            </select>
+
+            <select id="timeSlotSelector" class="terminal-select md:w-1/3">
+                <option value="" disabled selected>2. Select Time Slot</option>
+                <option value="Morning Break">Morning Break</option>
+                <option value="Lunch">Lunch</option>
+                <option value="Afternoon Break">Afternoon Break</option>
+            </select>
+
+            <button id="fetchButton" 
+                    class="w-full md:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-50"
+                    disabled>
+                Generate Report
+            </button>
+        </div>
+
+        <div id="reportDisplay" class="space-y-6">
+            <div id="loadingIndicator" class="text-center text-blue-400 hidden">
+                <svg class="animate-spin h-6 w-6 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2">Fetching data...</p>
+            </div>
+            
+            <div id="summary" class="bg-gray-800 p-4 rounded-lg shadow-inner border border-gray-700 hidden">
+                <p class="text-xl font-semibold">Event: <span id="summary-event" class="text-yellow-400">--</span></p>
+                <p class="text-xl font-semibold">Total Scans: <span id="summary-total" class="text-green-400">--</span></p>
+            </div>
+
+            <div id="reportResults" class="hidden">
+                <div class="overflow-x-auto rounded-lg shadow-xl">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Role (Click for Details)
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Total Scans (All Entries)
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportBody" class="bg-gray-800 divide-y divide-gray-700">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="detailsContainer" class="hidden bg-gray-800 p-4 rounded-lg shadow-xl space-y-4">
+                <h2 class="text-2xl font-bold text-yellow-400 border-b border-gray-700 pb-2">
+                    Details for Role: <span id="details-role-name" class="text-blue-400">--</span>
+                </h2>
+                
+                <div id="detailsLoading" class="text-center text-blue-400 hidden">
+                    <svg class="animate-spin h-5 w-5 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="mt-1 text-sm">Loading user details...</p>
+                </div>
+
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    User
+                                </th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Team/Group
+                                </th>
+                                <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                    Check-in Time
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailsBody" class="bg-gray-800 divide-y divide-gray-700">
+                            <tr>
+                                <td colspan="3" class="text-center py-4 text-gray-500">Click a role above to load user details.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="initialMessage" class="text-center text-gray-500 p-10">
+                Please select an **Event Day** and **Time Slot** then click 'Generate Report'.
+            </div>
+
+            <div id="errorMessage" class="hidden bg-red-900 border border-red-700 p-4 rounded-lg text-red-300">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        // API Endpoints - Corrected to exact file names
+        const GET_ROLES_API_URL = 'get_roles_api.php';  // Fetches the summary of roles
+        const GET_NAMES_API_URL = 'get_names_api.php';  // Fetches the names for a role
+
+        // Element References
+        const elements = {
+            eventSelector: document.getElementById('daySelector'),
+            timeSlotSelector: document.getElementById('timeSlotSelector'),
+            button: document.getElementById('fetchButton'),
+            loading: document.getElementById('loadingIndicator'),
+            summary: document.getElementById('summary'),
+            summaryEvent: document.getElementById('summary-event'),
+            summaryTotal: document.getElementById('summary-total'),
+            resultsContainer: document.getElementById('reportResults'),
+            reportBody: document.getElementById('reportBody'),
+            initialMessage: document.getElementById('initialMessage'),
+            errorMessage: document.getElementById('errorMessage'),
+            
+            // Detail Elements
+            detailsContainer: document.getElementById('detailsContainer'),
+            detailsRoleName: document.getElementById('details-role-name'),
+            detailsBody: document.getElementById('detailsBody'),
+            detailsLoading: document.getElementById('detailsLoading')
+        };
+        
+        // Global state to store the currently selected event and clicked row
+        let activeSelection = {
+            day: null,
+            timeSlot: null
+        };
+        let lastClickedRow = null;
+
+        /**
+         * Clears all dynamic report displays and shows the error box.
+         * @param {string} message - The error message to display.
+         */
+        function displayError(message) {
+            elements.loading.classList.add('hidden');
+            elements.summary.classList.add('hidden');
+            elements.resultsContainer.classList.add('hidden');
+            elements.detailsContainer.classList.add('hidden');
+            elements.initialMessage.classList.add('hidden');
+            
+            elements.errorMessage.textContent = `Error: ${message}`;
+            elements.errorMessage.classList.remove('hidden');
+        }
+
+        /**
+         * Renders the main role report (Master View).
+         * @param {object} data - The report data from get_roles_api.php.
+         * @param {string} eventName - The name of the event.
+         */
+        function renderRoleReport(data, eventName) {
+            activeSelection.day = eventName; // Store the event day name
+            activeSelection.timeSlot = elements.timeSlotSelector.value; // Store the time slot
+            lastClickedRow = null;  // Reset the clicked row
+            
+            // Hide all other UI states
+            elements.errorMessage.classList.add('hidden');
+            elements.initialMessage.classList.add('hidden');
+            elements.detailsContainer.classList.add('hidden'); // Hide old details
+            
+            // Update Summary
+            elements.summaryEvent.textContent = `${eventName} - ${activeSelection.timeSlot}`;
+            
+            // Calculate total logins from the array since we changed the API
+            const totalLogins = data.roles.reduce((sum, role) => sum + role.count, 0);
+            elements.summaryTotal.textContent = totalLogins;
+
+            elements.summary.classList.remove('hidden');
+
+            // Clear previous results
+            elements.reportBody.innerHTML = '';
+            
+            if (data.roles.length === 0 || totalLogins === 0) {
+                elements.reportBody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-gray-400">No login data found for this event/time slot.</td></tr>';
+                elements.resultsContainer.classList.remove('hidden');
+                return;
+            }
+
+            // Render new rows
+            data.roles.forEach(item => {
+                const row = elements.reportBody.insertRow();
+                row.classList.add('clickable-row');
+                
+                // Store the role for the click event
+                row.dataset.role = item.role; 
+                
+                // Add the click listener
+                row.addEventListener('click', () => fetchRoleDetails(row, item.role));
+
+                // 1. Role Cell
+                let roleCell = row.insertCell();
+                roleCell.textContent = item.role;
+                roleCell.classList.add('px-6', 'py-4', 'whitespace-nowrap', 'text-sm', 'font-medium', 'text-white');
+                
+                // 2. Total Logins
+                let totalCell = row.insertCell();
+                totalCell.textContent = item.count;
+                totalCell.classList.add('px-6', 'py-4', 'whitespace-nowrap', 'text-sm', 'text-right', 'font-bold', 'text-green-300');
+            });
+            
+            elements.resultsContainer.classList.remove('hidden');
+        }
+
+
+        /**
+         * Fetches and displays the list of names for a selected role (Detail View).
+         * @param {HTMLTableRowElement} rowElement - The clicked table row element.
+         * @param {string} userRole - The role to fetch details for.
+         */
+        async function fetchRoleDetails(rowElement, userRole) {
+            
+            // 1. Highlight the active row
+            if (lastClickedRow) {
+                lastClickedRow.classList.remove('active-row');
+            }
+            rowElement.classList.add('active-row');
+            lastClickedRow = rowElement;
+
+            // 2. Prepare the details area
+            elements.detailsContainer.classList.remove('hidden');
+            elements.detailsLoading.classList.remove('hidden');
+            elements.detailsBody.innerHTML = ''; // Clear old detail data
+            elements.detailsRoleName.textContent = userRole;
+
+            // 3. Prepare API payload
+            const payload = {
+                event: activeSelection.day, // Use the stored event day
+                timeSlot: activeSelection.timeSlot, // Pass the selected time slot
+                role: userRole
+            };
+            
+            try {
+                const response = await fetch(GET_NAMES_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    renderUserDetails(result.users);
+                } else {
+                    throw new Error(result.message || 'API reported failure.');
+                }
+                
+            } catch (error) {
+                 elements.detailsBody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-red-400">Error fetching details: ${error.message}</td></tr>`; 
+            } finally {
+                elements.detailsLoading.classList.add('hidden');
+            }
+        }
+        
+        /**
+         * Renders the user name list into the secondary table.
+         * @param {Array} users - Array of user arrays: [User Name, Team/Group, Check-in Time]
+         */
+        function renderUserDetails(users) {
+             elements.detailsBody.innerHTML = ''; // Clear loading/error
+            
+             if (users.length === 0) {
+                 elements.detailsBody.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-gray-400">No individual logins found for this role.</td></tr>`;
+                 return;
+             }
+             
+             users.forEach(user => {
+                 // The array format is: [User Name, Team/Group, Check-in Time]
+                 const [name, group, checkinTime] = user; 
+                 
+                 const row = elements.detailsBody.insertRow();
+                 row.classList.add('bg-gray-800/70', 'hover:bg-gray-700/50', 'transition');
+                 
+                 // User Name
+                 let nameCell = row.insertCell();
+                 nameCell.textContent = name;
+                 nameCell.classList.add('px-4', 'py-2', 'text-sm', 'font-semibold', 'text-white');
+                 
+                 // Team/Group
+                 let groupCell = row.insertCell();
+                 groupCell.textContent = group || 'N/A'; 
+                 groupCell.classList.add('px-4', 'py-2', 'text-sm', 'text-gray-400');
+                 
+                 // Check-in Time
+                 let timeCell = row.insertCell();
+                 timeCell.textContent = checkinTime;
+                 timeCell.classList.add('px-4', 'py-2', 'text-sm', 'text-yellow-300');
+             });
+        }
+
+
+        /**
+         * Fetches the main role report from the API.
+         */
+        async function fetchReport() {
+            const event = elements.eventSelector.value;
+            const timeSlot = elements.timeSlotSelector.value; 
+            
+            // Check if both are selected
+            if (!event || !timeSlot) {
+                displayError("Please select both an **Event Day** and a **Time Slot**.");
+                return;
+            }
+            
+            // 1. Set UI to loading state
+            elements.initialMessage.classList.add('hidden');
+            elements.errorMessage.classList.add('hidden');
+            elements.resultsContainer.classList.add('hidden');
+            elements.summary.classList.add('hidden');
+            elements.detailsContainer.classList.add('hidden'); // Hide old details
+            elements.loading.classList.remove('hidden');
+            elements.button.disabled = true;
+
+            let rawResponseText = null; 
+
+            try {
+                const payload = { 
+                    event: event,
+                    timeSlot: timeSlot
+                };
+                
+                const response = await fetch(GET_ROLES_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                rawResponseText = await response.text();
+
+                let result;
+                try {
+                    result = JSON.parse(rawResponseText);
+                } catch (e) {
+                    const rawOutputSnippet = rawResponseText.substring(0, 200);
+                    throw new Error(`Invalid JSON response (Status ${response.status}). Raw output: "${rawOutputSnippet}${rawResponseText.length > 200 ? '...' : ''}"`);
+                }
+
+                if (response.ok && result.status === 'success') {
+                    // 2. Success: render the report
+                    renderRoleReport(result, event);
+                } else {
+                    // 3. API Error: display the error
+                    const message = result.message || `API error: ${response.statusText}`;
+                    displayError(message);
+                }
+
+            } catch (error) {
+                // 4. Network/Fetch Error: display the error
+                displayError(`Report Fetch Error: ${error.message}`);
+            } finally {
+                // 5. Always re-enable button and hide loading
+                elements.loading.classList.add('hidden');
+                elements.button.disabled = false;
+            }
+        }
+
+        /**
+         * Checks if both Event Day and Time Slot are selected to enable the button.
+         */
+        function checkSelectionAndEnableButton() {
+            const eventSelected = !!elements.eventSelector.value;
+            const timeSlotSelected = !!elements.timeSlotSelector.value; 
+            
+            // Enable only if BOTH are selected (and not the disabled option)
+            elements.button.disabled = !(eventSelected && timeSlotSelected);
+            
+            // Update the initial message visibility if everything is selected
+            if (eventSelected && timeSlotSelected) {
+                elements.initialMessage.classList.add('hidden');
+            }
+        }
+
+        // --- Event Listeners and Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            elements.eventSelector.addEventListener('change', checkSelectionAndEnableButton);
+            elements.timeSlotSelector.addEventListener('change', checkSelectionAndEnableButton);
+            elements.button.addEventListener('click', fetchReport);
+        });
+    </script>
+
+</body>
+</html>
