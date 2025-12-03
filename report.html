@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Login Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Ubuntu', 'sans-serif'] } } } }
+    </script>
+    <style>
+        .clickable-row:hover { background-color: #374151; cursor: pointer; }
+        .active-row { background-color: #1e40af !important; border-left: 4px solid #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6 md:p-10 font-sans">
+
+    <div class="max-w-5xl mx-auto space-y-8">
+        <header class="text-center pb-4 border-b border-gray-700">
+            <h1 class="text-4xl font-extrabold text-blue-400">📊 Event Login Report</h1>
+            <p class="text-lg text-gray-400 mt-2">Serverless Backend Edition</p>
+        </header>
+
+        <div class="bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4">
+            
+            <select id="daySelector" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg p-3 w-full md:w-1/3 focus:ring-blue-500 focus:border-blue-500">
+                <option value="" disabled selected>1. Select Event Day</option>
+                <option value="IMC 4 Dec">IMC 4 Dec</option>
+                <option value="IMC 5 Dec">IMC 5 Dec</option>
+                <option value="IMC 6 Dec">IMC 6 Dec</option>
+                <option value="IMC 7 Dec">IMC 7 Dec</option>
+                <option value="IMC 8 Dec">IMC 8 Dec</option>
+                <option value="IMC Spare">IMC Spare</option>
+                <option value="Demo / Test">Demo / Test</option>
+            </select>
+
+            <select id="timeSlotSelector" class="bg-gray-700 border border-gray-600 text-white text-lg rounded-lg p-3 w-full md:w-1/3 focus:ring-blue-500 focus:border-blue-500">
+                <option value="" disabled selected>2. Select Time Slot</option>
+                <option value="Morning Break">Morning Break</option>
+                <option value="Lunch">Lunch</option>
+                <option value="Afternoon Break">Afternoon Break</option>
+                <option value="Welcome Party">Welcome Party</option>
+                <option value="Kanthok Dinner">Kanthok Dinner</option>
+                <option value="Regist Spare #1">Regist Spare #1</option>
+                <option value="Regist Spare #2">Regist Spare #2</option>
+            </select>
+
+            <button id="fetchButton" onclick="fetchReport()" disabled
+                    class="w-full md:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
+                Generate Report
+            </button>
+        </div>
+
+        <div id="reportDisplay" class="space-y-6">
+            
+            <div id="loadingIndicator" class="text-center text-blue-400 hidden">
+                <svg class="animate-spin h-8 w-8 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2 text-lg">Fetching data...</p>
+            </div>
+            
+            <div id="summary" class="bg-gray-800 p-4 rounded-lg shadow-inner border border-gray-700 hidden flex justify-between items-center">
+                <p class="text-xl font-semibold">Event: <span id="summary-event" class="text-yellow-400">--</span></p>
+                <p class="text-xl font-semibold">Total Scans: <span id="summary-total" class="text-green-400">--</span></p>
+            </div>
+
+            <div id="reportResults" class="hidden">
+                <div class="overflow-x-auto rounded-lg shadow-xl">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Role (Click for Details)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Total Scans</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportBody" class="bg-gray-800 divide-y divide-gray-700"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="detailsContainer" class="hidden bg-gray-800 p-4 rounded-lg shadow-xl space-y-4">
+                <h2 class="text-2xl font-bold text-yellow-400 border-b border-gray-700 pb-2">
+                    Details: <span id="details-role-name" class="text-blue-400">--</span>
+                </h2>
+                <div id="detailsLoading" class="text-center text-blue-400 hidden">Loading details...</div>
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-700">
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">User</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Group</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-300 uppercase">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailsBody" class="bg-gray-800 divide-y divide-gray-700"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="initialMessage" class="text-center text-gray-500 p-10">
+                Please select an **Event Day** and **Time Slot** then click 'Generate Report'.
+            </div>
+            <div id="errorMessage" class="hidden bg-red-900 border border-red-700 p-4 rounded-lg text-red-300 text-center"></div>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION: Point this to your new backend
+        const API_URL = '/api'; // If hosted on Vercel, this routes to api/index.js
+
+        const elements = {
+            daySelector: document.getElementById('daySelector'),
+            timeSlotSelector: document.getElementById('timeSlotSelector'),
+            button: document.getElementById('fetchButton'),
+            loading: document.getElementById('loadingIndicator'),
+            summary: document.getElementById('summary'),
+            summaryEvent: document.getElementById('summary-event'),
+            summaryTotal: document.getElementById('summary-total'),
+            reportResults: document.getElementById('reportResults'),
+            reportBody: document.getElementById('reportBody'),
+            detailsContainer: document.getElementById('detailsContainer'),
+            detailsRoleName: document.getElementById('details-role-name'),
+            detailsBody: document.getElementById('detailsBody'),
+            detailsLoading: document.getElementById('detailsLoading'),
+            initialMessage: document.getElementById('initialMessage'),
+            errorMessage: document.getElementById('errorMessage')
+        };
+
+        // Enable button only when both fields selected
+        function checkSelection() {
+            elements.button.disabled = !(elements.daySelector.value && elements.timeSlotSelector.value);
+            if (!elements.button.disabled) elements.initialMessage.classList.add('hidden');
+        }
+        elements.daySelector.addEventListener('change', checkSelection);
+        elements.timeSlotSelector.addEventListener('change', checkSelection);
+
+        // 1. Fetch Summary Report
+        async function fetchReport() {
+            const event = elements.daySelector.value;
+            const timeSlot = elements.timeSlotSelector.value;
+
+            // Reset UI
+            elements.loading.classList.remove('hidden');
+            elements.summary.classList.add('hidden');
+            elements.reportResults.classList.add('hidden');
+            elements.detailsContainer.classList.add('hidden');
+            elements.errorMessage.classList.add('hidden');
+            elements.button.disabled = true;
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_report_roles', event, timeSlot })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    renderRoles(data, event, timeSlot);
+                } else {
+                    throw new Error(data.message || 'API Error');
+                }
+            } catch (error) {
+                elements.errorMessage.textContent = error.message;
+                elements.errorMessage.classList.remove('hidden');
+            } finally {
+                elements.loading.classList.add('hidden');
+                elements.button.disabled = false;
+            }
+        }
+
+        function renderRoles(data, event, timeSlot) {
+            elements.summaryEvent.textContent = `${event} - ${timeSlot}`;
+            elements.summaryTotal.textContent = data.total_logins;
+            elements.summary.classList.remove('hidden');
+            elements.reportResults.classList.remove('hidden');
+            
+            elements.reportBody.innerHTML = '';
+
+            if (data.roles.length === 0) {
+                elements.reportBody.innerHTML = '<tr><td colspan="2" class="p-4 text-center text-gray-500">No data found.</td></tr>';
+                return;
+            }
+
+            data.roles.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row transition border-b border-gray-700';
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-sm font-medium text-white">${item.role}</td>
+                    <td class="px-6 py-4 text-sm text-right font-bold text-green-300">${item.count}</td>
+                `;
+                tr.addEventListener('click', () => {
+                    document.querySelectorAll('.active-row').forEach(r => r.classList.remove('active-row'));
+                    tr.classList.add('active-row');
+                    fetchDetails(event, timeSlot, item.role);
+                });
+                elements.reportBody.appendChild(tr);
+            });
+        }
+
+        // 2. Fetch User Details
+        async function fetchDetails(event, timeSlot, role) {
+            elements.detailsContainer.classList.remove('hidden');
+            elements.detailsRoleName.textContent = role;
+            elements.detailsBody.innerHTML = '';
+            elements.detailsLoading.classList.remove('hidden');
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_report_users', event, timeSlot, role })
+                });
+                
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    elements.detailsLoading.classList.add('hidden');
+                    if (data.users.length === 0) {
+                        elements.detailsBody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-500">No users found.</td></tr>';
+                    } else {
+                        data.users.forEach(user => {
+                            const tr = document.createElement('tr');
+                            tr.className = 'bg-gray-800/50 border-b border-gray-700';
+                            tr.innerHTML = `
+                                <td class="px-4 py-2 text-sm font-semibold text-white">${user.name}</td>
+                                <td class="px-4 py-2 text-sm text-gray-400">${user.group || '-'}</td>
+                                <td class="px-4 py-2 text-sm text-yellow-300">${user.timestamp}</td>
+                            `;
+                            elements.detailsBody.appendChild(tr);
+                        });
+                    }
+                }
+            } catch (error) {
+                elements.detailsBody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-red-400">Error: ${error.message}</td></tr>`;
+            }
+        }
+    </script>
+</body>
+</html>
