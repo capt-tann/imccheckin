@@ -595,7 +595,7 @@
 
         // --- NEW: Start count fetching interval ---
         // Fetch count immediately on load/selection change, then every 5 seconds.
-        const countInterval = setInterval(fetchTerminalCount, 5000); 
+        const countInterval = setInterval(fetchTerminalCount, 60000); // Every 60 seconds
 
         // Ensure the hidden NFC input is focused.
         if (elements.nfcInput) {
